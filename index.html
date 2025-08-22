@@ -156,143 +156,192 @@
     </section>
   </main>
 
-  <script>
-    // Formatters
-    const fmtSEK0 = new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0});
-    const fmtSEK = new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK'});
-    const fmtPct = new Intl.NumberFormat('sv-SE', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2});
-
-    const byId = (id)=>document.getElementById(id);
-    const amount=byId('amount');
-    const amountRange=byId('amountRange');
-    const years=byId('years');
-    const yearsRange=byId('yearsRange');
-    const rate=byId('rate');
-    const monthlyFee=byId('monthlyFee');
-    const setupFee=byId('setupFee');
-    const financeSetup=byId('financeSetup');
-
-    const monthlyOut=byId('monthlyOut');
-    const aprOut=byId('aprOut');
-    const totalCostOut=byId('totalCostOut');
-    const totalRepayOut=byId('totalRepayOut');
-    const scheduleBody=byId('scheduleBody');
-    const toggleRowsBtn=byId('toggleRowsBtn');
-    const exportCsvBtn=byId('exportCsvBtn');
-    const howWeCalc=byId('howWeCalc');
-
+    <script>
+    // ---- selectors
+    const $ = (id) => document.getElementById(id);
+    const amount = $("amount"), amountRange = $("amountRange");
+    const years = $("years"), yearsRange = $("yearsRange");
+    const rate = $("rate"), monthlyFee = $("monthlyFee");
+    const setupFee = $("setupFee"), financeSetup = $("financeSetup");
+  
+    const monthlyOut = $("monthlyOut");
+    const aprOut = $("aprOut");
+    const totalCostOut = $("totalCostOut");
+    const totalRepayOut = $("totalRepayOut");
+    const howWeCalc = $("howWeCalc");
+    const scheduleBody = $("scheduleBody");
+    const toggleRowsBtn = $("toggleRowsBtn");
+    const exportCsvBtn = $("exportCsvBtn");
+  
+    const fmtSEK0 = new Intl.NumberFormat("sv-SE", {style:"currency", currency:"SEK", maximumFractionDigits:0});
+    const fmtSEK  = new Intl.NumberFormat("sv-SE", {style:"currency", currency:"SEK"});
+    const fmtPct  = new Intl.NumberFormat("sv-SE", {style:"percent", minimumFractionDigits:2, maximumFractionDigits:2});
+  
+    // Fill slider track
     function setRangeFill(range){
-      const min=parseFloat(range.min), max=parseFloat(range.max), val=parseFloat(range.value);
-      const pct=((val-min)/(max-min))*100; range.style.setProperty('--filled', pct+'%');
+      if(!range) return;
+      const min = parseFloat(range.min), max = parseFloat(range.max), val = parseFloat(range.value);
+      const pct = ((val - min) / (max - min)) * 100;
+      range.style.setProperty("--filled", pct + "%");
     }
-
-    function sync(a,b){
-      a.addEventListener('input',()=>{b.value=a.value; setRangeFill(b); compute();});
-      b.addEventListener('input',()=>{a.value=b.value; setRangeFill(b); compute();});
+  
+    // Pair a number input with its range slider
+    function sync(a, b){
+      a.addEventListener("input", () => { b.value = a.value; setRangeFill(b); compute(); });
+      b.addEventListener("input", () => { a.value = b.value; setRangeFill(b); compute(); });
     }
-
-    function pmt(r, n, pv){ if(r===0) return pv/n; const r1=Math.pow(1+r,n); return (pv*r*r1)/(r1-1); }
-
-    function buildSchedule(pv, r_m, n_m, fee){
-      const rows=[]; let bal=pv; const base=pmt(r_m,n_m,pv);
-      for(let i=1;i<=n_m;i++){
-        const interest=bal*r_m; let principal=base-interest; if(i===n_m) principal=bal; bal=Math.max(0, bal-principal);
-        rows.push({i, interest, principal, fee, payment: base+fee, balance: bal});
+  
+    // Annuity payment (per month) excluding fees
+    function pmt(r, n, pv){
+      if (r === 0) return pv / n;
+      const r1 = Math.pow(1 + r, n);
+      return (pv * r * r1) / (r1 - 1);
+    }
+  
+    // Build schedule using *unrounded* base payment; we show rounded monthly to user
+    function buildSchedule(principal, r_m, n_m, fee){
+      const rows = [];
+      let bal = principal;
+      const base = pmt(r_m, n_m, principal); // exclude fee
+      for (let i = 1; i <= n_m; i++){
+        const interest = bal * r_m;
+        let principalPart = base - interest;
+        if (i === n_m) principalPart = bal; // clear rounding residue
+        bal = Math.max(0, bal - principalPart);
+        rows.push({ i, interest, principal: principalPart, fee, payment: base + fee, balance: bal });
       }
-      return {rows, base};
+      return { rows, base };
     }
-
-    function irrMonthly(cfs,maxIter=100,tol=1e-7){
-      const npv=(r)=>cfs.reduce((acc,cf,t)=>acc+cf/Math.pow(1+r,t),0);
-      let lo=-0.9999, hi=1.0; let fLo=npv(lo), fHi=npv(hi);
-      if(fLo*fHi>0){ hi=5.0; fHi=npv(hi); if(fLo*fHi>0) return NaN; }
-      for(let k=0;k<maxIter;k++){ const mid=(lo+hi)/2, f=npv(mid); if(Math.abs(f)<tol) return mid; if(fLo*f<0){hi=mid; fHi=f;} else {lo=mid; fLo=f;} }
-      return (lo+hi)/2;
+  
+    // IRR on monthly flows (bisection)
+    function irrMonthly(cfs, maxIter=100, tol=1e-7){
+      const npv = (r) => cfs.reduce((acc, cf, t) => acc + cf / Math.pow(1 + r, t), 0);
+      let lo = -0.9999, hi = 1.0;
+      let fLo = npv(lo), fHi = npv(hi);
+      if (fLo * fHi > 0) { hi = 5.0; fHi = npv(hi); if (fLo * fHi > 0) return NaN; }
+      for (let k = 0; k < maxIter; k++){
+        const mid = (lo + hi) / 2, f = npv(mid);
+        if (Math.abs(f) < tol) return mid;
+        if (fLo * f < 0) { hi = mid; fHi = f; } else { lo = mid; fLo = f; }
+      }
+      return (lo + hi) / 2;
     }
-
+  
     function compute(){
-      const A=parseInt(amount.value||0);
-      const Y=parseInt(years.value||0);
-      const N=Y*12;
-      const r=parseFloat(rate.value||0)/100/12;
-      const avi=Math.max(0, parseFloat(monthlyFee.value||0));
-      const setup=Math.max(0, parseFloat(setupFee.value||0));
-
-      const principal= financeSetup.checked ? (A + setup) : A;
-      const {rows, base}=buildSchedule(principal, r, N, avi);
-      const totalPay = rows.reduce((s,r)=>s+r.payment,0);
-      const totalInterest = rows.reduce((s,r)=>s+r.interest,0);
-      const totalFees = rows.reduce((s,r)=>s+r.fee,0) + (financeSetup.checked?0:setup);
+      // Read UI
+      const A     = parseInt(amount.value || 0, 10);            // credit amount
+      const Y     = parseInt(years.value || 0, 10);             // years
+      const N     = Y * 12;                                     // months
+      const rNom  = parseFloat(rate.value || 0);                // nominal p.a. %
+      const r_m   = rNom / 100 / 12;                            // monthly rate
+      const avi   = Math.max(0, parseFloat(monthlyFee.value || 0));
+      const setup = Math.max(0, parseFloat(setupFee.value || 0));
+      const pv    = financeSetup.checked ? (A + setup) : A;     // finance setup fee or not
+  
+      // Schedule & totals (using unrounded base, we round user-facing monthly up)
+      const { rows, base } = buildSchedule(pv, r_m, N, avi);
+      const monthlyShown = Math.ceil(base + avi);               // round UP to next krona
+      monthlyOut.textContent = fmtSEK0.format(monthlyShown);
+  
+      // Totals (sum of rounded monthly payments)
+      const totalPayRounded = monthlyShown * N;                 // what the user actually pays if rounded each month
+      const totalInterest = rows.reduce((s, r) => s + r.interest, 0);
+      const totalFees = rows.reduce((s, r) => s + r.fee, 0) + (financeSetup.checked ? 0 : setup);
       const totalCost = totalInterest + totalFees;
-
-      const cf0 = financeSetup.checked ? A : (A - setup);
-      const cashflows=[cf0, ...rows.map(r=>-(r.payment))];
-      const r_m = irrMonthly(cashflows);
-      const apr = (isFinite(r_m)&&!isNaN(r_m)) ? (Math.pow(1+r_m,12)-1) : NaN;
-
-      monthlyOut.textContent = fmtSEK0.format(base + avi);
-      aprOut.textContent = isFinite(apr) ? fmtPct.format(apr) : '–';
-      totalRepayOut.textContent = fmtSEK0.format(totalPay);
-      totalCostOut.textContent = fmtSEK0.format(totalCost);
-
-      // schedule preview 12 rows by default
-      renderSchedule(rows, 12);
-
-      // Update narrative
-      const d=new Date();
-      const dateStr=d.toLocaleDateString('sv-SE');
-      const yrsStr=Y+ (Y===1?' år':' år');
-      howWeCalc.innerHTML = `Vid ett kreditbelopp om ${fmtSEK0.format(A)} med en rörlig årsränta på ${parseFloat(rate.value).toFixed(2).replace('.',',')} % och ${yrsStr} löptid (återbetalningstid) beräknas den effektiva räntan till ${isFinite(apr)?fmtPct.format(apr):'–'}. I exemplet ingår administrationsavgift om ${fmtSEK0.format(avi)} per månad och uppläggningsavgift om ${fmtSEK0.format(setup)} ${financeSetup.checked?'som finansieras i lånet':'som betalas vid start'}. Det ordinarie månadsbeloppet att betala är ${fmtSEK0.format(base+avi)} och det sammanlagda beloppet att betala blir ${fmtSEK0.format(totalPay)} fördelat på ${N} avbetalningar. Exemplet är beräknat ${dateStr}, förutsätter att ränta och avgifter är oförändrade under hela kreditperioden. Avrundning till närmaste krona.`;
-
-      setRangeFill(amountRange); setRangeFill(yearsRange);
-      return {rows};
-    }
-
-    function renderSchedule(rows, limit){
-      const n=rows.length; const showAll = limit>=n; scheduleBody.innerHTML='';
-      for(let i=0;i<(showAll?n:Math.min(limit,n));i++){
-        const r=rows[i];
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td class="py-2 pr-4">${r.i}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.interest)}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.principal)}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.fee)}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.payment)}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.balance)}</td>`;
-        scheduleBody.appendChild(tr);
+  
+      totalRepayOut && (totalRepayOut.textContent = fmtSEK0.format(totalPayRounded));
+      totalCostOut && (totalCostOut.textContent = fmtSEK0.format(totalCost));
+  
+      // APR via IRR (use rounded monthly outflows)
+      const cf0 = financeSetup.checked ? A : (A - setup);       // net disbursement at t=0
+      const cfs = [cf0, ...Array.from({length:N}, () => -monthlyShown)];
+      const rMonth = irrMonthly(cfs);
+      const apr = (isFinite(rMonth) && !isNaN(rMonth)) ? (Math.pow(1 + rMonth, 12) - 1) : NaN;
+      aprOut && (aprOut.textContent = isFinite(apr) ? fmtPct.format(apr) : "–");
+  
+      // Narrative
+      const d = new Date();
+      const yrsStr = `${Y} år`;
+      if (howWeCalc) {
+        howWeCalc.innerHTML =
+          `Vid ett kreditbelopp om ${fmtSEK0.format(A)} med en rörlig årsränta på ${rNom.toFixed(2).replace('.', ',')} % och ${yrsStr} ` +
+          `löptid (återbetalningstid) beräknas den effektiva räntan till ${isFinite(apr) ? fmtPct.format(apr) : "–"}. ` +
+          `I exemplet ingår administrationsavgift om ${fmtSEK0.format(avi)} per månad och uppläggningsavgift om ${fmtSEK0.format(setup)} ` +
+          `${financeSetup.checked ? "som finansieras i lånet" : "som betalas vid start"}. ` +
+          `Det ordinarie månadsbeloppet att betala är ${fmtSEK0.format(monthlyShown)} och det sammanlagda beloppet att betala blir ` +
+          `${fmtSEK0.format(totalPayRounded)} fördelat på ${N} avbetalningar. Exemplet är beräknat ` +
+          `${d.toLocaleDateString("sv-SE")}, förutsätter att ränta och avgifter är oförändrade under hela kreditperioden. ` +
+          `Avrundning till närmaste högre krona.`;
       }
-      toggleRowsBtn.textContent = showAll? 'Visa färre rader' : 'Visa alla rader';
-      toggleRowsBtn.dataset.showing = showAll? 'all' : 'preview';
-    }
-
-    function exportCSV(rows){
-      const header=['Månad','Ränta (kr)','Amortering (kr)','Aviavgift (kr)','Betalning (kr)','Saldo (kr)'];
-      const lines=[header.join(';')];
-      for(const r of rows){ lines.push([r.i,Math.round(r.interest),Math.round(r.principal),Math.round(r.fee),Math.round(r.payment),Math.round(r.balance)].join(';')); }
-      const blob=new Blob([`﻿`+lines.join('
-')],{type:'text/csv;charset=utf-8;'});
-      const url=URL.createObjectURL(blob); const a=document.createElement('a');
-      a.href=url; a.download='amorteringsplan.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    }
-
-    function init(){
-      // sensible defaults similar to screenshot
-      amount.value=175000; amountRange.value=175000;
-      years.value=5; yearsRange.value=5;
-      rate.value=9.67; monthlyFee.value=39; setupFee.value=499; financeSetup.checked=false;
+  
+      // Render schedule preview (first 12 rows) using unrounded base payment
+      if (scheduleBody) {
+        const limit = 12;
+        const show = Math.min(rows.length, limit);
+        scheduleBody.innerHTML = "";
+        for (let i = 0; i < show; i++){
+          const r = rows[i];
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="py-2 pr-4">${r.i}</td>
+            <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.interest)}</td>
+            <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.principal)}</td>
+            <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.fee)}</td>
+            <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.payment)}</td>
+            <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.balance)}</td>`;
+          scheduleBody.appendChild(tr);
+        }
+        if (toggleRowsBtn) {
+          toggleRowsBtn.onclick = () => {
+            scheduleBody.innerHTML = "";
+            rows.forEach(r => {
+              const tr = document.createElement("tr");
+              tr.innerHTML = `
+                <td class="py-2 pr-4">${r.i}</td>
+                <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.interest)}</td>
+                <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.principal)}</td>
+                <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.fee)}</td>
+                <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.payment)}</td>
+                <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.balance)}</td>`;
+              scheduleBody.appendChild(tr);
+            });
+          };
+        }
+        if (exportCsvBtn) {
+          exportCsvBtn.onclick = () => {
+            const header = ['Månad','Ränta (kr)','Amortering (kr)','Aviavgift (kr)','Betalning (kr)','Saldo (kr)'];
+            const lines = [header.join(';')];
+            for (const r of rows) {
+              lines.push([r.i, Math.round(r.interest), Math.round(r.principal), Math.round(r.fee), Math.round(r.payment), Math.round(r.balance)].join(';'));
+            }
+            const blob = new Blob([`\ufeff` + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'amorteringsplan.csv';
+            document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+          };
+        }
+      }
+  
+      // keep sliders filled
       setRangeFill(amountRange); setRangeFill(yearsRange);
-
-      sync(amount, amountRange); sync(years, yearsRange);
-      [rate, monthlyFee, setupFee, financeSetup].forEach(el=> el.addEventListener('input', compute));
-
-      toggleRowsBtn.addEventListener('click',()=>{
-        const rows=compute().rows; const state=toggleRowsBtn.dataset.showing; if(state==='all'){renderSchedule(rows,12);} else {renderSchedule(rows, rows.length);} });
-      exportCsvBtn.addEventListener('click',()=>exportCSV(compute().rows));
-
-      compute();
     }
-
-    document.addEventListener('DOMContentLoaded', init);
+  
+    // ---- init defaults + listeners
+    document.addEventListener("DOMContentLoaded", () => {
+      // sensible defaults similar to your example
+      amount.value = 175000; amountRange.value = 175000;
+      years.value = 5; yearsRange.value = 5;
+      rate.value = 9.67; monthlyFee.value = 39; setupFee.value = 499; financeSetup.checked = false;
+  
+      sync(amount, amountRange);
+      sync(years, yearsRange);
+      [rate, monthlyFee, setupFee, financeSetup].forEach(el => el.addEventListener("input", compute));
+  
+      setRangeFill(amountRange); setRangeFill(yearsRange);
+      compute();
+    });
   </script>
 </body>
 </html>
