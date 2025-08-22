@@ -1,472 +1,129 @@
 <!DOCTYPE html>
-<html lang="sv">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lånekalkylator (SEK) — Resurs‑style</title>
-  <meta name="description" content="En modern lånekalkylator i SEK med månadsbetalning, effektiv ränta, total kostnad och amorteringsplan. Fristående HTML du kan publicera på GitHub Pages." />
-  <!-- Tailwind via CDN for quick export -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* Accessible range track/thumb styling */
-    input[type=range] { width: 100%; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; height: 20px; width: 20px; border-radius: 9999px; background: #111827; cursor: pointer; border: 2px solid white; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
-    input[type=range]::-moz-range-thumb { height: 20px; width: 20px; border-radius: 9999px; background: #111827; cursor: pointer; border: 2px solid white; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
-    input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 9999px; background: linear-gradient(90deg,#111827 var(--filled,0%), #e5e7eb var(--filled,0%)); }
-    input[type=range]::-moz-range-track { height: 8px; border-radius: 9999px; background: #e5e7eb; }
-    /* Smooth number input spin buttons on Chrome */
-    input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  </style>
-</head>
-<body class="bg-gray-50 text-gray-900">
-  <header class="bg-white border-b sticky top-0 z-10">
-    <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-      <h1 class="text-xl sm:text-2xl font-bold tracking-tight">Lånekalkylator (SEK) — Bank‑style</h1>
-      <a href="#disclaimer" class="text-sm underline">Viktigt att veta</a>
-    </div>
-  </header>
+a.addEventListener('input',()=>{b.value=a.value; setRangeFill(b); compute();});
+b.addEventListener('input',()=>{a.value=b.value; setRangeFill(b); compute();});
+}
 
-  <main class="max-w-5xl mx-auto px-4 py-6">
-    <!-- Hero blurb -->
-    <section class="mb-6">
-      <div class="rounded-2xl bg-white p-5 shadow-sm border">
-        <div class="grid gap-4 sm:grid-cols-3 sm:items-center">
-          <div class="sm:col-span-2">
-            <h2 class="text-lg sm:text-xl font-semibold">Räkna ut ungefärlig månadskostnad</h2>
-            <ul class="mt-2 text-sm text-gray-600 list-disc pl-5 space-y-1">
-              <li>Snabb beräkning av månadsbetalning och effektiv ränta.</li>
-              <li>Justera ränta, återbetalningstid och avgifter (uppläggning & avi).</li>
-              <li>Exportera amorteringsplan till CSV och dela länk med dina värden.</li>
-            </ul>
-          </div>
-          <div class="sm:justify-self-end">
-            <button id="copyLinkBtn" class="w-full sm:w-auto inline-flex items-center justify-center rounded-xl border bg-gray-900 text-white px-4 py-2 text-sm font-medium shadow hover:bg-black">Kopiera länk med värden</button>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- Calculator -->
-    <section class="grid gap-6 md:grid-cols-2">
-      <!-- Inputs -->
-      <div class="rounded-2xl bg-white p-5 shadow-sm border">
-        <h3 class="text-base font-semibold mb-4">Dina uppgifter</h3>
+function pmt(r, n, pv){ if(r===0) return pv/n; const r1=Math.pow(1+r,n); return (pv*r*r1)/(r1-1); }
 
-        <!-- Belopp -->
-        <div class="mb-5">
-          <div class="flex items-end justify-between gap-3">
-            <label for="amount" class="font-medium">Lånebelopp</label>
-            <div class="flex items-center gap-2 text-sm text-gray-600">
-              <input id="amount" type="number" inputmode="numeric" class="w-36 rounded-lg border px-3 py-1.5 text-right" min="5000" max="300000" step="1000" />
-              <span class="text-gray-500">kr</span>
-            </div>
-          </div>
-          <input id="amountRange" type="range" min="5000" max="300000" step="1000" class="mt-3" />
-          <div class="flex justify-between text-xs text-gray-500 mt-1">
-            <span>5 000</span><span>300 000</span>
-          </div>
-        </div>
 
-        <!-- Löptid -->
-        <div class="mb-5">
-          <div class="flex items-end justify-between gap-3">
-            <label for="months" class="font-medium">Återbetalningstid</label>
-            <div class="flex items-center gap-2 text-sm text-gray-600">
-              <input id="months" type="number" class="w-20 rounded-lg border px-3 py-1.5 text-right" min="12" max="180" step="1" />
-              <span class="text-gray-500">mån</span>
-            </div>
-          </div>
-          <input id="monthsRange" type="range" min="12" max="180" step="1" class="mt-3" />
-          <div class="flex justify-between text-xs text-gray-500 mt-1">
-            <span>12 mån</span><span>180 mån</span>
-          </div>
-        </div>
+function buildSchedule(pv, r_m, n_m, fee){
+const rows=[]; let bal=pv; const base=pmt(r_m,n_m,pv);
+for(let i=1;i<=n_m;i++){
+const interest=bal*r_m; let principal=base-interest; if(i===n_m) principal=bal; bal=Math.max(0, bal-principal);
+rows.push({i, interest, principal, fee, payment: base+fee, balance: bal});
+}
+return {rows, base};
+}
 
-        <!-- Ränta -->
-        <div class="mb-5">
-          <div class="flex items-end justify-between gap-3">
-            <label for="rate" class="font-medium">Ränta (nom. per år)</label>
-            <div class="flex items-center gap-2 text-sm text-gray-600">
-              <input id="rate" type="number" class="w-24 rounded-lg border px-3 py-1.5 text-right" min="1" max="30" step="0.01" />
-              <span class="text-gray-500">%</span>
-            </div>
-          </div>
-          <input id="rateRange" type="range" min="1" max="30" step="0.01" class="mt-3" />
-          <div class="flex justify-between text-xs text-gray-500 mt-1">
-            <span>1%</span><span>30%</span>
-          </div>
-          <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span class="text-gray-500">Snabbval:</span>
-            <button data-quick-rate="7.95" class="chip">7,95%</button>
-            <button data-quick-rate="10.95" class="chip">10,95%</button>
-            <button data-quick-rate="14.95" class="chip">14,95%</button>
-            <button data-quick-rate="19.95" class="chip">19,95%</button>
-          </div>
-        </div>
 
-        <!-- Avgifter -->
-        <fieldset class="mb-2">
-          <legend class="font-medium mb-3">Avgifter (valfritt)</legend>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label class="block">
-              <span class="text-sm text-gray-700">Uppläggningsavgift</span>
-              <div class="mt-1 flex items-center gap-2">
-                <input id="setupFee" type="number" inputmode="numeric" class="w-28 rounded-lg border px-3 py-1.5 text-right" min="0" step="1" />
-                <span class="text-gray-500 text-sm">kr</span>
-              </div>
-            </label>
-            <label class="block">
-              <span class="text-sm text-gray-700">Aviavgift (per månad)</span>
-              <div class="mt-1 flex items-center gap-2">
-                <input id="monthlyFee" type="number" inputmode="numeric" class="w-28 rounded-lg border px-3 py-1.5 text-right" min="0" step="1" />
-                <span class="text-gray-500 text-sm">kr/mån</span>
-              </div>
-            </label>
-          </div>
-          <label class="mt-3 inline-flex items-center gap-2 text-sm">
-            <input id="financeSetup" type="checkbox" class="rounded border-gray-300" />
-            <span>Lägg till uppläggningsavgiften i lånet (istället för att betala direkt)</span>
-          </label>
-        </fieldset>
+function irrMonthly(cfs,maxIter=100,tol=1e-7){
+const npv=(r)=>cfs.reduce((acc,cf,t)=>acc+cf/Math.pow(1+r,t),0);
+let lo=-0.9999, hi=1.0; let fLo=npv(lo), fHi=npv(hi);
+if(fLo*fHi>0){ hi=5.0; fHi=npv(hi); if(fLo*fHi>0) return NaN; }
+for(let k=0;k<maxIter;k++){ const mid=(lo+hi)/2, f=npv(mid); if(Math.abs(f)<tol) return mid; if(fLo*f<0){hi=mid; fHi=f;} else {lo=mid; fLo=f;} }
+return (lo+hi)/2;
+}
 
-        <div class="flex items-center gap-3 mt-4">
-          <button id="resetBtn" class="rounded-xl border px-4 py-2 text-sm">Återställ</button>
-          <span id="status" class="text-xs text-gray-500"></span>
-        </div>
-      </div>
 
-      <!-- Results -->
-      <div class="space-y-6">
-        <div class="rounded-2xl bg-white p-5 shadow-sm border">
-          <h3 class="text-base font-semibold mb-4">Beräknat resultat</h3>
-          <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div class="col-span-2 sm:col-span-1">
-              <div class="text-xs text-gray-500">Månadskostnad*</div>
-              <div id="monthlyOut" class="text-3xl font-bold tracking-tight">–</div>
-            </div>
-            <div>
-              <div class="text-xs text-gray-500">Effektiv ränta (estimat)</div>
-              <div id="aprOut" class="text-xl font-semibold">–</div>
-            </div>
-            <div>
-              <div class="text-xs text-gray-500">Nominell ränta</div>
-              <div id="nomOut" class="text-xl">–</div>
-            </div>
-            <div>
-              <div class="text-xs text-gray-500">Total kostnad</div>
-              <div id="totalCostOut" class="text-lg font-medium">–</div>
-            </div>
-            <div>
-              <div class="text-xs text-gray-500">Totalt att återbetala</div>
-              <div id="totalRepayOut" class="text-lg font-medium">–</div>
-            </div>
-            <div>
-              <div class="text-xs text-gray-500">Löptid</div>
-              <div id="termOut" class="text-lg">–</div>
-            </div>
-          </div>
-          <p class="text-xs text-gray-500 mt-3">*Månadskostnaden inkluderar aviavgift om angiven.</p>
-        </div>
+function compute(){
+const A=parseInt(amount.value||0);
+const Y=parseInt(years.value||0);
+const N=Y*12;
+const r=parseFloat(rate.value||0)/100/12;
+const avi=Math.max(0, parseFloat(monthlyFee.value||0));
+const setup=Math.max(0, parseFloat(setupFee.value||0));
 
-        <div class="rounded-2xl bg-white p-5 shadow-sm border">
-          <div class="flex items-center justify-between">
-            <h3 class="text-base font-semibold">Förhandsvisning amorteringsplan</h3>
-            <div class="flex items-center gap-2">
-              <button id="exportCsvBtn" class="rounded-xl border px-3 py-1.5 text-sm">Exportera CSV</button>
-              <button id="toggleRowsBtn" class="rounded-xl border px-3 py-1.5 text-sm">Visa alla rader</button>
-            </div>
-          </div>
-          <div class="overflow-x-auto mt-3">
-            <table class="min-w-full text-sm">
-              <thead class="text-gray-500">
-                <tr>
-                  <th class="text-left py-2 pr-4">#</th>
-                  <th class="text-right py-2 pr-4">Ränta</th>
-                  <th class="text-right py-2 pr-4">Amortering</th>
-                  <th class="text-right py-2 pr-4">Aviavg.</th>
-                  <th class="text-right py-2 pr-4">Betalning</th>
-                  <th class="text-right py-2 pr-4">Saldo</th>
-                </tr>
-              </thead>
-              <tbody id="scheduleBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <section id="disclaimer" class="mt-6 text-xs text-gray-500">
-      <div class="rounded-2xl bg-white p-5 shadow-sm border">
-        <p class="mb-2 font-medium">Viktigt:</p>
-        <ul class="list-disc pl-5 space-y-1">
-          <li>Detta är en teknisk demokalkylator. Resultaten är indikativa och kan avvika från verkliga erbjudanden efter kreditprövning.</li>
-          <li>Effektiv ränta beräknas via internränta (IRR) baserat på nettoutbetalning och samtliga månadsbetalningar inkl. avgifter.</li>
-          <li>Inga varumärken, logotyper eller designmönster från någon bank används här.</li>
-        </ul>
-      </div>
-    </section>
-  </main>
+const principal= financeSetup.checked ? (A + setup) : A;
+const {rows, base}=buildSchedule(principal, r, N, avi);
+const totalPay = rows.reduce((s,r)=>s+r.payment,0);
+const totalInterest = rows.reduce((s,r)=>s+r.interest,0);
+const totalFees = rows.reduce((s,r)=>s+r.fee,0) + (financeSetup.checked?0:setup);
+const totalCost = totalInterest + totalFees;
 
-  <footer class="max-w-5xl mx-auto px-4 py-10 text-center text-xs text-gray-400">
-    © <span id="year"></span> — Fri att använda och ändra. Ingen garanti.
-  </footer>
 
-  <script>
-    // --- Utilities ---
-    const fmtSEK0 = new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 });
-    const fmtSEK = new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK' });
-    const fmtPct = new Intl.NumberFormat('sv-SE', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const cf0 = financeSetup.checked ? A : (A - setup);
+const cashflows=[cf0, ...rows.map(r=>-(r.payment))];
+const r_m = irrMonthly(cashflows);
+const apr = (isFinite(r_m)&&!isNaN(r_m)) ? (Math.pow(1+r_m,12)-1) : NaN;
 
-    const qs = sel => document.querySelector(sel);
-    const byId = id => document.getElementById(id);
 
-    // Bind elements
-    const amount = byId('amount');
-    const amountRange = byId('amountRange');
-    const months = byId('months');
-    const monthsRange = byId('monthsRange');
-    const rate = byId('rate');
-    const rateRange = byId('rateRange');
-    const setupFee = byId('setupFee');
-    const monthlyFee = byId('monthlyFee');
-    const financeSetup = byId('financeSetup');
+monthlyOut.textContent = fmtSEK0.format(base + avi);
+aprOut.textContent = isFinite(apr) ? fmtPct.format(apr) : '–';
+totalRepayOut.textContent = fmtSEK0.format(totalPay);
+totalCostOut.textContent = fmtSEK0.format(totalCost);
 
-    const monthlyOut = byId('monthlyOut');
-    const aprOut = byId('aprOut');
-    const nomOut = byId('nomOut');
-    const totalCostOut = byId('totalCostOut');
-    const totalRepayOut = byId('totalRepayOut');
-    const termOut = byId('termOut');
 
-    const scheduleBody = byId('scheduleBody');
-    const exportCsvBtn = byId('exportCsvBtn');
-    const toggleRowsBtn = byId('toggleRowsBtn');
-    const copyLinkBtn = byId('copyLinkBtn');
-    const resetBtn = byId('resetBtn');
-    const statusEl = byId('status');
+// schedule preview 12 rows by default
+renderSchedule(rows, 12);
 
-    // Range fill helper
-    function setRangeFill(range) {
-      const min = parseFloat(range.min);
-      const max = parseFloat(range.max);
-      const val = parseFloat(range.value);
-      const pct = ((val - min) / (max - min)) * 100;
-      range.style.setProperty('--filled', pct + '%');
-    }
 
-    // Payment (annuity). rate: monthly decimal, n: months, pv: principal
-    function pmt(rate, n, pv) {
-      if (rate === 0) return pv / n;
-      const r1 = Math.pow(1 + rate, n);
-      return (pv * rate * r1) / (r1 - 1);
-    }
+// Update narrative
+const d=new Date();
+const dateStr=d.toLocaleDateString('sv-SE');
+const yrsStr=Y+ (Y===1?' år':' år');
+howWeCalc.innerHTML = `Vid ett kreditbelopp om ${fmtSEK0.format(A)} med en rörlig årsränta på ${parseFloat(rate.value).toFixed(2).replace('.',',')} % och ${yrsStr} löptid (återbetalningstid) beräknas den effektiva räntan till ${isFinite(apr)?fmtPct.format(apr):'–'}. I exemplet ingår administrationsavgift om ${fmtSEK0.format(avi)} per månad och uppläggningsavgift om ${fmtSEK0.format(setup)} ${financeSetup.checked?'som finansieras i lånet':'som betalas vid start'}. Det ordinarie månadsbeloppet att betala är ${fmtSEK0.format(base+avi)} och det sammanlagda beloppet att betala blir ${fmtSEK0.format(totalPay)} fördelat på ${N} avbetalningar. Exemplet är beräknat ${dateStr}, förutsätter att ränta och avgifter är oförändrade under hela kreditperioden. Avrundning till närmaste krona.`;
 
-    // Build amortization schedule
-    function buildSchedule(pv, rateMonthly, n, monthlyFeeKr) {
-      const rows = [];
-      let balance = pv;
-      const basePayment = pmt(rateMonthly, n, pv); // without monthly fee
 
-      for (let i = 1; i <= n; i++) {
-        const interest = balance * rateMonthly;
-        let principal = basePayment - interest;
-        // Adjust last payment to clear rounding
-        if (i === n) principal = balance;
-        balance = Math.max(0, balance - principal);
-        const payment = basePayment + monthlyFeeKr; // total outflow this month
-        rows.push({
-          i, interest, principal, fee: monthlyFeeKr, payment, balance
-        });
-      }
-      return { rows, basePayment };
-    }
+setRangeFill(amountRange); setRangeFill(yearsRange);
+return {rows};
+}
 
-    // IRR via bisection on monthly rate
-    function irrMonthly(cashflows, maxIter = 100, tol = 1e-7) {
-      // cashflows[0] typically positive (inflow), others negative (outflow)
-      const npv = (r) => cashflows.reduce((acc, cf, t) => acc + cf / Math.pow(1 + r, t), 0);
-      let lo = -0.9999, hi = 1.0; // -99.99% .. +100% per month
-      let fLo = npv(lo), fHi = npv(hi);
-      if (isNaN(fLo) || isNaN(fHi)) return NaN;
-      // Ensure bracket — expand if needed
-      if (fLo * fHi > 0) {
-        // Try expanding upper bound
-        hi = 5.0; fHi = npv(hi);
-        if (fLo * fHi > 0) return NaN; // give up
-      }
-      for (let k = 0; k < maxIter; k++) {
-        const mid = (lo + hi) / 2;
-        const fMid = npv(mid);
-        if (Math.abs(fMid) < tol) return mid;
-        if (fLo * fMid < 0) { hi = mid; fHi = fMid; }
-        else { lo = mid; fLo = fMid; }
-      }
-      return (lo + hi) / 2;
-    }
 
-    function compute() {
-      const A = clamp(parseInt(amount.value || 0), parseInt(amount.min), parseInt(amount.max));
-      const N = clamp(parseInt(months.value || 0), parseInt(months.min), parseInt(months.max));
-      const rNom = clamp(parseFloat(rate.value || 0), parseFloat(rate.min), parseFloat(rate.max));
-      const setup = Math.max(0, parseFloat(setupFee.value || 0));
-      const avi = Math.max(0, parseFloat(monthlyFee.value || 0));
-      const monthlyRate = rNom / 100 / 12;
+function renderSchedule(rows, limit){
+const n=rows.length; const showAll = limit>=n; scheduleBody.innerHTML='';
+for(let i=0;i<(showAll?n:Math.min(limit,n));i++){
+const r=rows[i];
+const tr=document.createElement('tr');
+tr.innerHTML=`<td class="py-2 pr-4">${r.i}</td>
+<td class="py-2 pr-4 text-right">${fmtSEK0.format(r.interest)}</td>
+<td class="py-2 pr-4 text-right">${fmtSEK0.format(r.principal)}</td>
+<td class="py-2 pr-4 text-right">${fmtSEK0.format(r.fee)}</td>
+<td class="py-2 pr-4 text-right">${fmtSEK0.format(r.payment)}</td>
+<td class="py-2 pr-4 text-right">${fmtSEK0.format(r.balance)}</td>`;
+scheduleBody.appendChild(tr);
+}
+toggleRowsBtn.textContent = showAll? 'Visa färre rader' : 'Visa alla rader';
+toggleRowsBtn.dataset.showing = showAll? 'all' : 'preview';
+}
 
-      // Principal used for schedule: if financing setup, add to principal; else pay upfront
-      const principal = financeSetup.checked ? (A + setup) : A;
-      const { rows, basePayment } = buildSchedule(principal, monthlyRate, N, avi);
 
-      // Totals
-      const totalPayment = rows.reduce((s, r) => s + r.payment, 0);
-      const totalInterest = rows.reduce((s, r) => s + r.interest, 0);
-      const totalFees = rows.reduce((s, r) => s + r.fee, 0) + (financeSetup.checked ? 0 : setup);
-      const totalRepay = totalPayment + (financeSetup.checked ? 0 : 0); // already included monthly fees; setup upfront excluded here
-      const totalCost = totalInterest + totalFees; // cost over and above borrowed belopp
+function exportCSV(rows){
+const header=['Månad','Ränta (kr)','Amortering (kr)','Aviavgift (kr)','Betalning (kr)','Saldo (kr)'];
+const lines=[header.join(';')];
+for(const r of rows){ lines.push([r.i,Math.round(r.interest),Math.round(r.principal),Math.round(r.fee),Math.round(r.payment),Math.round(r.balance)].join(';')); }
+const blob=new Blob([`
+•
+`+lines.join('
+')],{type:'text/csv;charset=utf-8;'});
+const url=URL.createObjectURL(blob); const a=document.createElement('a');
+a.href=url; a.download='amorteringsplan.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 
-      // APR via IRR on monthly flows
-      // t=0 inflow: if setup paid upfront -> A - setup; else A (since setup is financed)
-      const cf0 = financeSetup.checked ? A : (A - setup);
-      const cfs = [cf0];
-      // Monthly outflows include basePayment + avi; but if last rounding, adjust to exact final balance payoff
-      for (let i = 0; i < rows.length; i++) {
-        const out = rows[i].payment; // basePayment + avi
-        cfs.push(-out);
-      }
-      const r_m = irrMonthly(cfs);
-      const effApr = (isFinite(r_m) && !isNaN(r_m)) ? (Math.pow(1 + r_m, 12) - 1) : NaN;
 
-      // UI outputs
-      monthlyOut.textContent = fmtSEK0.format(basePayment + avi);
-      aprOut.textContent = isFinite(effApr) && !isNaN(effApr) ? fmtPct.format(effApr) : '–';
-      nomOut.textContent = (rNom || rNom === 0) ? (rNom.toFixed(2).replace('.', ',') + ' % p.a.') : '–';
-      totalCostOut.textContent = fmtSEK0.format(totalCost);
-      totalRepayOut.textContent = fmtSEK0.format(totalPayment + (financeSetup.checked ? 0 : 0));
-      termOut.textContent = `${N} mån (${(N/12).toFixed(1).replace('.', ',')} år)`;
+function init(){
+// sensible defaults similar to screenshot
+amount.value=175000; amountRange.value=175000;
+years.value=5; yearsRange.value=5;
+rate.value=9.67; monthlyFee.value=39; setupFee.value=499; financeSetup.checked=false;
+setRangeFill(amountRange); setRangeFill(yearsRange);
 
-      // Build schedule table (preview 12 by default)
-      renderSchedule(rows, 12);
 
-      // Sync ranges fill
-      [amountRange, monthsRange, rateRange].forEach(setRangeFill);
+sync(amount, amountRange); sync(years, yearsRange);
+[rate, monthlyFee, setupFee, financeSetup].forEach(el=> el.addEventListener('input', compute));
 
-      return { A, N, rNom, setup, avi, financeSetup: financeSetup.checked, rows };
-    }
 
-    function renderSchedule(rows, limit = 12) {
-      const n = rows.length;
-      const showAll = limit >= n;
-      scheduleBody.innerHTML = '';
-      for (let i = 0; i < (showAll ? n : Math.min(limit, n)); i++) {
-        const r = rows[i];
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="py-2 pr-4">${r.i}</td>
-          <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.interest)}</td>
-          <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.principal)}</td>
-          <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.fee)}</td>
-          <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.payment)}</td>
-          <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.balance)}</td>
-        `;
-        scheduleBody.appendChild(tr);
-      }
-      toggleRowsBtn.textContent = showAll ? 'Visa färre rader' : 'Visa alla rader';
-      toggleRowsBtn.dataset.showing = showAll ? 'all' : 'preview';
-    }
+toggleRowsBtn.addEventListener('click',()=>{
+const rows=compute().rows; const state=toggleRowsBtn.dataset.showing; if(state==='all'){renderSchedule(rows,12);} else {renderSchedule(rows, rows.length);} });
+exportCsvBtn.addEventListener('click',()=>exportCSV(compute().rows));
 
-    function exportScheduleCSV(rows) {
-      const header = ['Månad','Ränta (kr)','Amortering (kr)','Aviavgift (kr)','Betalning (kr)','Saldo (kr)'];
-      const lines = [header.join(';')];
-      for (const r of rows) {
-        lines.push([r.i, Math.round(r.interest), Math.round(r.principal), Math.round(r.fee), Math.round(r.payment), Math.round(r.balance)].join(';'));
-      }
-      const blob = new Blob([\`${'\ufeff'}\` + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'amorteringsplan.csv';
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-    }
 
-    function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+compute();
+}
 
-    function syncInputs(from, to) {
-      from.addEventListener('input', () => { to.value = from.value; setRangeFill(to); compute(); });
-      to.addEventListener('input', () => { from.value = to.value; setRangeFill(to); compute(); });
-    }
 
-    function applyQueryParams() {
-      const p = new URLSearchParams(location.search);
-      if (p.has('amount')) amount.value = amountRange.value = clamp(parseInt(p.get('amount')), parseInt(amount.min), parseInt(amount.max));
-      if (p.has('months')) months.value = monthsRange.value = clamp(parseInt(p.get('months')), parseInt(months.min), parseInt(months.max));
-      if (p.has('rate')) rate.value = rateRange.value = clamp(parseFloat(p.get('rate')), parseFloat(rate.min), parseFloat(rate.max));
-      if (p.has('setupFee')) setupFee.value = Math.max(0, parseInt(p.get('setupFee')));
-      if (p.has('monthlyFee')) monthlyFee.value = Math.max(0, parseInt(p.get('monthlyFee')));
-      if (p.has('financeSetup')) financeSetup.checked = p.get('financeSetup') === '1' || p.get('financeSetup') === 'true';
-    }
-
-    function copyLink() {
-      const p = new URLSearchParams();
-      p.set('amount', amount.value);
-      p.set('months', months.value);
-      p.set('rate', rate.value);
-      p.set('setupFee', setupFee.value || 0);
-      p.set('monthlyFee', monthlyFee.value || 0);
-      p.set('financeSetup', financeSetup.checked ? '1' : '0');
-      const url = location.origin + location.pathname + '?' + p.toString();
-      navigator.clipboard.writeText(url).then(() => { setStatus('Länk kopierad!'); }).catch(() => { setStatus('Kunde inte kopiera länk'); });
-    }
-
-    function setStatus(msg) {
-      statusEl.textContent = msg;
-      setTimeout(() => statusEl.textContent = '', 2500);
-    }
-
-    function initDefaults() {
-      amount.value = amountRange.value = 300000;
-      months.value = monthsRange.value = 84; // 7 år
-      rate.value = rateRange.value = 9.95;
-      setupFee.value = 0; // Ange t.ex. 395 om ni tar uppläggningsavgift
-      monthlyFee.value = 0; // Ange t.ex. 39 om aviavgift tas ut
-      financeSetup.checked = false;
-      [amountRange, monthsRange, rateRange].forEach(setRangeFill);
-    }
-
-    // --- Event wiring ---
-    document.addEventListener('DOMContentLoaded', () => {
-      initDefaults();
-      applyQueryParams();
-
-      // Bind sync for range/number pairs
-      syncInputs(amount, amountRange);
-      syncInputs(months, monthsRange);
-      syncInputs(rate, rateRange);
-
-      // Quick rate chips
-      document.querySelectorAll('[data-quick-rate]').forEach(btn => {
-        btn.classList.add('rounded-full','px-2.5','py-1','border','hover:bg-gray-50');
-        btn.addEventListener('click', () => {
-          const val = parseFloat(btn.dataset.quickRate);
-          rate.value = rateRange.value = val;
-          setRangeFill(rateRange);
-          compute();
-        });
-      });
-
-      copyLinkBtn.addEventListener('click', copyLink);
-      exportCsvBtn.addEventListener('click', () => exportScheduleCSV(compute().rows));
-      toggleRowsBtn.addEventListener('click', () => {
-        const current = toggleRowsBtn.dataset.showing;
-        const rows = compute().rows;
-        if (current === 'all') renderSchedule(rows, 12); else renderSchedule(rows, rows.length);
-      });
-      resetBtn.addEventListener('click', () => { initDefaults(); compute(); });
-
-      // First compute
-      compute();
-
-      // Footer year
-      byId('year').textContent = new Date().getFullYear();
-    });
-  </script>
+document.addEventListener('DOMContentLoaded', init);
+</script>
 </body>
 </html>
