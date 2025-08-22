@@ -8,8 +8,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root{
-      --brand-bg:#d5ece8;  /* teal-ish backdrop */
-      --brand-teal:#0f5a56; /* deep teal for accents */
+      --brand-bg:#d5ece8;  /* teal backdrop */
+      --brand-teal:#0f5a56; /* deep teal accents */
       --track:#c6d2d7;     /* slider rail */
       --rail:#0f5a56;      /* filled rail */
     }
@@ -24,10 +24,10 @@
     input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{appearance:none; margin:0}
     .card{box-shadow:0 1px 2px rgba(0,0,0,.06);}   
 
-    /* --- Suffix helpers to stop text overlap --- */
+    /* Suffix helpers to prevent overlap */
     .has-suffix{position:relative}
-    .has-suffix input{padding-right:3.25rem} /* room for short suffix, e.g. kr, % , år */
-    .has-suffix.long input{padding-right:5.75rem} /* room for long suffix like kr/mån */
+    .has-suffix input{padding-right:3.25rem}
+    .has-suffix.long input{padding-right:5.75rem}
     .suffix{position:absolute; right:.75rem; top:50%; transform:translateY(-50%); color:#6b7280; font-size:.875rem; pointer-events:none}
   </style>
 </head>
@@ -162,6 +162,7 @@
     </section>
   </main>
 
+  <!-- FULL SCRIPT: calculators + UI wiring -->
   <script>
     // Formatters
     const fmtSEK0 = new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0});
@@ -169,129 +170,69 @@
     const fmtPct = new Intl.NumberFormat('sv-SE', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2});
 
     const byId = (id)=>document.getElementById(id);
-    const amount=byId('amount');
-    const amountRange=byId('amountRange');
-    const years=byId('years');
-    const yearsRange=byId('yearsRange');
-    const rate=byId('rate');
-    const monthlyFee=byId('monthlyFee');
-    const setupFee=byId('setupFee');
-    const financeSetup=byId('financeSetup');
+    const amount=byId('amount'); const amountRange=byId('amountRange');
+    const years=byId('years'); const yearsRange=byId('yearsRange');
+    const rate=byId('rate'); const monthlyFee=byId('monthlyFee');
+    const setupFee=byId('setupFee'); const financeSetup=byId('financeSetup');
+    const monthlyOut=byId('monthlyOut'); const aprOut=byId('aprOut');
+    const totalCostOut=byId('totalCostOut'); const totalRepayOut=byId('totalRepayOut');
+    const scheduleBody=byId('scheduleBody'); const toggleRowsBtn=byId('toggleRowsBtn');
+    const exportCsvBtn=byId('exportCsvBtn'); const howWeCalc=byId('howWeCalc');
 
-    const monthlyOut=byId('monthlyOut');
-    const aprOut=byId('aprOut');
-    const totalCostOut=byId('totalCostOut');
-    const totalRepayOut=byId('totalRepayOut');
-    const scheduleBody=byId('scheduleBody');
-    const toggleRowsBtn=byId('toggleRowsBtn');
-    const exportCsvBtn=byId('exportCsvBtn');
-    const howWeCalc=byId('howWeCalc');
+    function setRangeFill(range){ if(!range) return; const min=parseFloat(range.min), max=parseFloat(range.max), val=parseFloat(range.value); const pct=((val-min)/(max-min))*100; range.style.setProperty('--filled', pct+'%'); }
 
-    function setRangeFill(range){
-      const min=parseFloat(range.min), max=parseFloat(range.max), val=parseFloat(range.value);
-      const pct=((val-min)/(max-min))*100; range.style.setProperty('--filled', pct+'%');
-    }
-
-    function sync(a,b){
-      a.addEventListener('input',()=>{b.value=a.value; setRangeFill(b); compute();});
-      b.addEventListener('input',()=>{a.value=b.value; setRangeFill(b); compute();});
-    }
+    function sync(a,b){ a.addEventListener('input',()=>{b.value=a.value; setRangeFill(b); compute();}); b.addEventListener('input',()=>{a.value=b.value; setRangeFill(b); compute();}); }
 
     function pmt(r, n, pv){ if(r===0) return pv/n; const r1=Math.pow(1+r,n); return (pv*r*r1)/(r1-1); }
 
-    function buildSchedule(pv, r_m, n_m, fee){
-      const rows=[]; let bal=pv; const base=pmt(r_m,n_m,pv);
-      for(let i=1;i<=n_m;i++){
-        const interest=bal*r_m; let principal=base-interest; if(i===n_m) principal=bal; bal=Math.max(0, bal-principal);
-        rows.push({i, interest, principal, fee, payment: base+fee, balance: bal});
-      }
-      return {rows, base};
-    }
+    function buildSchedule(pv, r_m, n_m, fee){ const rows=[]; let bal=pv; const base=pmt(r_m,n_m,pv); for(let i=1;i<=n_m;i++){ const interest=bal*r_m; let principal=base-interest; if(i===n_m) principal=bal; bal=Math.max(0, bal-principal); rows.push({i, interest, principal, fee, payment: base+fee, balance: bal}); } return {rows, base}; }
 
-    function irrMonthly(cfs,maxIter=100,tol=1e-7){
-      const npv=(r)=>cfs.reduce((acc,cf,t)=>acc+cf/Math.pow(1+r,t),0);
-      let lo=-0.9999, hi=1.0; let fLo=npv(lo), fHi=npv(hi);
-      if(fLo*fHi>0){ hi=5.0; fHi=npv(hi); if(fLo*fHi>0) return NaN; }
-      for(let k=0;k<maxIter;k++){ const mid=(lo+hi)/2, f=npv(mid); if(Math.abs(f)<tol) return mid; if(fLo*f<0){hi=mid; fHi=f;} else {lo=mid; fLo=f;} }
-      return (lo+hi)/2;
-    }
+    function irrMonthly(cfs,maxIter=100,tol=1e-7){ const npv=(r)=>cfs.reduce((acc,cf,t)=>acc+cf/Math.pow(1+r,t),0); let lo=-0.9999, hi=1.0; let fLo=npv(lo), fHi=npv(hi); if(fLo*fHi>0){ hi=5.0; fHi=npv(hi); if(fLo*fHi>0) return NaN; } for(let k=0;k<maxIter;k++){ const mid=(lo+hi)/2, f=npv(mid); if(Math.abs(f)<tol) return mid; if(fLo*f<0){hi=mid; fHi=f;} else {lo=mid; fLo=f;} } return (lo+hi)/2; }
 
     function compute(){
-      const A=parseInt(amount.value||0);
-      const Y=parseInt(years.value||0);
-      const N=Y*12;
-      const r=parseFloat(rate.value||0)/100/12;
-      const avi=Math.max(0, parseFloat(monthlyFee.value||0));
-      const setup=Math.max(0, parseFloat(setupFee.value||0));
-
+      const A=parseInt(amount.value||0,10); const Y=parseInt(years.value||0,10); const N=Y*12;
+      const rNom=parseFloat(rate.value||0); const r=rNom/100/12;
+      const avi=Math.max(0, parseFloat(monthlyFee.value||0)); const setup=Math.max(0, parseFloat(setupFee.value||0));
       const principal= financeSetup.checked ? (A + setup) : A;
       const {rows, base}=buildSchedule(principal, r, N, avi);
-      const monthlyShown = Math.ceil(base + avi);
+
+      const monthlyShown = Math.ceil(base + avi); // round UP to nearest krona as in example
       const totalPayRounded = monthlyShown * N;
       const totalInterest = rows.reduce((s,r)=>s+r.interest,0);
       const totalFees = rows.reduce((s,r)=>s+r.fee,0) + (financeSetup.checked?0:setup);
       const totalCost = totalInterest + totalFees;
 
       const cf0 = financeSetup.checked ? A : (A - setup);
-      const cashflows=[cf0, ...Array.from({length:N},()=>-monthlyShown)];
-      const r_m = irrMonthly(cashflows);
-      const apr = (isFinite(r_m)&&!isNaN(r_m)) ? (Math.pow(1+r_m,12)-1) : NaN;
+      const cfs = [cf0, ...Array.from({length:N}, () => -monthlyShown)];
+      const r_m = irrMonthly(cfs); const apr = (isFinite(r_m)&&!isNaN(r_m)) ? (Math.pow(1+r_m,12)-1) : NaN;
 
       monthlyOut.textContent = fmtSEK0.format(monthlyShown);
-      aprOut.textContent = isFinite(apr) ? fmtPct.format(apr) : '–';
-      totalRepayOut.textContent = fmtSEK0.format(totalPayRounded);
-      totalCostOut.textContent = fmtSEK0.format(totalCost);
+      if(aprOut) aprOut.textContent = isFinite(apr) ? fmtPct.format(apr) : '–';
+      if(totalRepayOut) totalRepayOut.textContent = fmtSEK0.format(totalPayRounded);
+      if(totalCostOut) totalCostOut.textContent = fmtSEK0.format(totalCost);
 
       renderSchedule(rows, 12);
 
-      const d=new Date();
-      const yrsStr=Y+ ' år';
-      howWeCalc.innerHTML = `Vid ett kreditbelopp om ${fmtSEK0.format(A)} med en rörlig årsränta på ${parseFloat(rate.value).toFixed(2).replace('.',',')} % och ${yrsStr} löptid (återbetalningstid) beräknas den effektiva räntan till ${isFinite(apr)?fmtPct.format(apr):'–'}. I exemplet ingår administrationsavgift om ${fmtSEK0.format(avi)} per månad och uppläggningsavgift om ${fmtSEK0.format(setup)} ${financeSetup.checked?'som finansieras i lånet':'som betalas vid start'}. Det ordinarie månadsbeloppet att betala är ${fmtSEK0.format(monthlyShown)} och det sammanlagda beloppet att betala blir ${fmtSEK0.format(totalPayRounded)} fördelat på ${N} avbetalningar. Exemplet är beräknat ${d.toLocaleDateString('sv-SE')}, förutsätter att ränta och avgifter är oförändrade under hela kreditperioden. Avrundning till närmaste högre krona.`;
+      const d=new Date(); const yrsStr=Y+' år';
+      if(howWeCalc) howWeCalc.innerHTML = `Vid ett kreditbelopp om ${fmtSEK0.format(A)} med en rörlig årsränta på ${rNom.toFixed(2).replace('.',',')} % och ${yrsStr} löptid (återbetalningstid) beräknas den effektiva räntan till ${isFinite(apr)?fmtPct.format(apr):'–'}. I exemplet ingår administrationsavgift om ${fmtSEK0.format(avi)} per månad och uppläggningsavgift om ${fmtSEK0.format(setup)} ${financeSetup.checked?'som finansieras i lånet':'som betalas vid start'}. Det ordinarie månadsbeloppet att betala är ${fmtSEK0.format(monthlyShown)} och det sammanlagda beloppet att betala blir ${fmtSEK0.format(totalPayRounded)} fördelat på ${N} avbetalningar. Exemplet är beräknat ${d.toLocaleDateString('sv-SE')}, förutsätter att ränta och avgifter är oförändrade under hela kreditperioden. Avrundning till närmaste högre krona.`;
 
       setRangeFill(amountRange); setRangeFill(yearsRange);
       return {rows};
     }
 
-    function renderSchedule(rows, limit){
-      const n=rows.length; const showAll = limit>=n; scheduleBody.innerHTML='';
-      for(let i=0;i<(showAll?n:Math.min(limit,n));i++){
-        const r=rows[i];
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td class="py-2 pr-4">${r.i}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.interest)}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.principal)}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.fee)}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.payment)}</td>
-        <td class="py-2 pr-4 text-right">${fmtSEK0.format(r.balance)}</td>`;
-        scheduleBody.appendChild(tr);
-      }
-      toggleRowsBtn.textContent = showAll? 'Visa färre rader' : 'Visa alla rader';
-      toggleRowsBtn.dataset.showing = showAll? 'all' : 'preview';
-    }
+    function renderSchedule(rows, limit){ const n=rows.length; const showAll = limit>=n; scheduleBody.innerHTML=''; for(let i=0;i<(showAll?n:Math.min(limit,n));i++){ const r=rows[i]; const tr=document.createElement('tr'); tr.innerHTML=`<td class="py-2 pr-4">${r.i}</td><td class="py-2 pr-4 text-right">${fmtSEK0.format(r.interest)}</td><td class="py-2 pr-4 text-right">${fmtSEK0.format(r.principal)}</td><td class="py-2 pr-4 text-right">${fmtSEK0.format(r.fee)}</td><td class="py-2 pr-4 text-right">${fmtSEK0.format(r.payment)}</td><td class="py-2 pr-4 text-right">${fmtSEK0.format(r.balance)}</td>`; scheduleBody.appendChild(tr);} toggleRowsBtn.textContent = showAll? 'Visa färre rader' : 'Visa alla rader'; toggleRowsBtn.dataset.showing = showAll? 'all' : 'preview'; }
 
-    function exportCSV(rows){
-      const header=['Månad','Ränta (kr)','Amortering (kr)','Aviavgift (kr)','Betalning (kr)','Saldo (kr)'];
-      const lines=[header.join(';')];
-      for(const r of rows){ lines.push([r.i,Math.round(r.interest),Math.round(r.principal),Math.round(r.fee),Math.round(r.payment),Math.round(r.balance)].join(';')); }
-      const blob=new Blob([`﻿`+lines.join('
-')],{type:'text/csv;charset=utf-8;'});
-      const url=URL.createObjectURL(blob); const a=document.createElement('a');
-      a.href=url; a.download='amorteringsplan.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    }
+    function exportCSV(rows){ const header=['Månad','Ränta (kr)','Amortering (kr)','Aviavgift (kr)','Betalning (kr)','Saldo (kr)']; const lines=[header.join(';')]; for(const r of rows){ lines.push([r.i,Math.round(r.interest),Math.round(r.principal),Math.round(r.fee),Math.round(r.payment),Math.round(r.balance)].join(';')); } const blob=new Blob([`﻿`+lines.join('
+')],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='amorteringsplan.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 
     function init(){
-      amount.value=175000; amountRange.value=175000;
-      years.value=5; yearsRange.value=5;
+      amount.value=175000; amountRange.value=175000; years.value=5; yearsRange.value=5;
       rate.value=9.67; monthlyFee.value=39; setupFee.value=499; financeSetup.checked=false;
       setRangeFill(amountRange); setRangeFill(yearsRange);
-
       sync(amount, amountRange); sync(years, yearsRange);
       [rate, monthlyFee, setupFee, financeSetup].forEach(el=> el.addEventListener('input', compute));
-
-      toggleRowsBtn.addEventListener('click',()=>{
-        const rows=compute().rows; const state=toggleRowsBtn.dataset.showing; if(state==='all'){renderSchedule(rows,12);} else {renderSchedule(rows, rows.length);} });
-      exportCsvBtn.addEventListener('click',()=>exportCSV(compute().rows));
-
+      if(toggleRowsBtn) toggleRowsBtn.addEventListener('click',()=>{ const rows=compute().rows; const state=toggleRowsBtn.dataset.showing; if(state==='all'){renderSchedule(rows,12);} else {renderSchedule(rows, rows.length);} });
+      if(exportCsvBtn) exportCsvBtn.addEventListener('click',()=>exportCSV(compute().rows));
       compute();
     }
 
